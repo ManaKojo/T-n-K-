@@ -1,249 +1,600 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-<meta charset="UTF-8">
-<title>Tàn Dư Ký Lục</title>
-<style>
-body {
-  background:#111;
-  color:#eee;
-  font-family:monospace;
-  display:flex;
-  justify-content:center;
-  padding-top:30px;
-}
-#game {
-  width:520px;
-  border:1px solid #444;
-  padding:15px;
-}
-#stats {
-  font-size:14px;
-  white-space:pre-line;
-  margin-bottom:10px;
-}
-#scene {
-  min-height:120px;
-  margin-bottom:10px;
-  white-space:pre-line;
-}
-button {
-  width:100%;
-  margin:5px 0;
-  background:#222;
-  color:#eee;
-  border:1px solid #555;
-  padding:6px;
-  cursor:pointer;
-}
-button:hover { background:#333; }
-</style>
+  <meta charset="UTF-8">
+  <title>Text RPG Roguelike</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg: #0f0f13;
+      --panel: #17171e;
+      --text: #e6e6e9;
+      --muted: #a9a9b2;
+      --accent: #6ee7b7;
+      --danger: #ef4444;
+      --warn: #f59e0b;
+      --link: #93c5fd;
+    }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: radial-gradient(1200px 500px at 10% 10%, #15151b, var(--bg));
+      color: var(--text);
+      line-height: 1.6;
+    }
+    header {
+      padding: 16px;
+      background: linear-gradient(90deg, #111, #15151b);
+      border-bottom: 1px solid #222532;
+    }
+    header h1 { margin: 0; font-size: 20px; letter-spacing: 0.5px; }
+    header small { color: var(--muted); }
+    main { max-width: 980px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid #222532;
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    }
+    .left, .right { padding: 14px; }
+    .log {
+      height: 48vh;
+      overflow: auto;
+      padding-right: 6px;
+    }
+    .log p { margin: 6px 0; }
+    .log .sys { color: var(--muted); }
+    .log .good { color: var(--accent); }
+    .log .bad { color: var(--danger); }
+    .log .warn { color: var(--warn); }
+    .actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
+    button {
+      background: #1f1f27;
+      border: 1px solid #2a2a36;
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover { border-color: #3a3a48; }
+    .primary { background: #23302b; border-color: #2f4b3f; color: #ccefe0; }
+    .danger { background: #2c1f21; border-color: #542b32; color: #ffd6da; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .statgrid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+      font-size: 14px; margin-top: 6px;
+    }
+    .tag { display: inline-block; padding: 2px 8px; border: 1px solid #2a2a36; border-radius: 999px; font-size: 12px; color: var(--muted); margin-right: 6px; }
+    .divider { border-top: 1px solid #232533; margin: 8px 0; }
+    footer { max-width: 980px; margin: 8px auto 24px; padding: 0 16px; color: var(--muted); font-size: 13px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .inv { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 14px; }
+    .equip { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 14px; }
+    .small { font-size: 13px; color: var(--muted); }
+    a { color: var(--link); text-decoration: none; }
+  </style>
 </head>
 <body>
+<header class="panel">
+  <h1>Chronicles of Ashen Realms <small>— Text RPG Roguelike</small></h1>
+</header>
 
-<div id="game">
-  <h1>TÀN DƯ KÝ LỤC</h1>
-  <div id="stats"></div>
-  <div id="scene"></div>
-  <div id="choices"></div>
-</div>
+<main>
+  <section class="panel left">
+    <div id="intro"></div>
+    <div class="divider"></div>
+    <div class="log" id="log"></div>
+    <div class="divider"></div>
+    <div id="actions" class="actions"></div>
+  </section>
+
+  <aside class="panel right">
+    <div id="char"></div>
+    <div class="divider"></div>
+    <div id="world"></div>
+    <div class="divider"></div>
+    <div id="status"></div>
+    <div class="divider"></div>
+    <div id="inventory"></div>
+    <div class="divider"></div>
+    <div id="historyPanel"></div>
+  </aside>
+</main>
+
+<footer>
+  Lưu lịch sử ở localStorage per-world. Mã nguồn đơn giản để bạn mở rộng lore, sự kiện, kỹ năng, chiến đấu.
+</footer>
 
 <script>
-// ================== WORLD MEMORY ==================
-let worldMemory = JSON.parse(localStorage.getItem("worldMemory")) || {
-  cycles: 0,
-  violence: 0
-};
-
-let spawnedMonsters = JSON.parse(localStorage.getItem("spawnedMonsters")) || [];
-
-// ================== UTILS ==================
-const rand = (a,b)=>Math.floor(Math.random()*(b-a+1))+a;
-const pick = arr => arr[Math.floor(Math.random()*arr.length)];
-
-// ================== PLAYER ==================
-function createPlayer(){
-  const origins = [
-    "kẻ đào tẩu",
-    "lính gác cũ",
-    "học đồ pháp sư",
-    "kẻ không có ký ức"
-  ];
-  return {
-    origin: pick(origins),
-    hp: 20,
-    mp: 10,
-    dmg: 4,
-    inventory:[]
-  };
-}
-let player = createPlayer();
-
-// ================== MONSTERS ==================
-const monsterParts = {
-  prefix:["Tàn","Hủ","Lệch","Vọng","Méo","Câm"],
-  core:["Thể","Ảnh","Xác","Bóng","Dư Ảnh"],
-  suffix:["Lang Thang","Sai Lệch","Bị Quên","Không Tên","Mất Trí"]
-};
-
-function monsterLore(){
-  if(worldMemory.violence > worldMemory.cycles)
-    return "Nó mang dấu tích của bạo lực tích tụ qua các chu kỳ.";
-  if(worldMemory.cycles > 2)
-    return "Sinh vật này dường như nhớ những lần bạn chết.";
-  return "Một thực thể mới sinh ra từ tàn dư thế giới.";
-}
-
-function generateMonster(){
-  let name;
-  do {
-    name = pick(monsterParts.prefix)+" "+pick(monsterParts.core)+" "+pick(monsterParts.suffix);
-  } while(spawnedMonsters.includes(name));
-
-  spawnedMonsters.push(name);
-  localStorage.setItem("spawnedMonsters",JSON.stringify(spawnedMonsters));
-
-  let base = 6 + worldMemory.cycles*2;
-
-  return {
-    name,
-    hp: base + rand(0,5),
-    dmg: 2 + rand(0,worldMemory.cycles+2),
-    lore: monsterLore()
-  };
-}
-
-// ================== NPC ==================
-const npcTemplates = [
-  {
-    name:"Người Ghi Chép",
-    intro:"Ta ghi lại lịch sử, dù nó liên tục tự mâu thuẫn.",
-    react:()=>worldMemory.cycles>0
-      ? "Ngươi đã từng tồn tại trong bản ghi cũ."
-      : "Lịch sử chưa từng nhắc tới ngươi."
-  },
-  {
-    name:"Kẻ Lưu Lạc",
-    intro:"Ta tìm ký ức của mình trong tàn tích.",
-    react:()=>worldMemory.violence>2
-      ? "Ngươi mang mùi máu."
-      : "Ngươi chưa bị thế giới bẻ gãy."
+/* ==== Seeded RNG (xmur3 + mulberry32) ==== */
+function xmur3(str) {
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
   }
+  return function() {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    h ^= h >>> 16;
+    return h >>> 0;
+  }
+}
+function mulberry32(a) {
+  return function() {
+    let t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+}
+function makeRNG(seedStr) {
+  const seed = xmur3(seedStr);
+  return mulberry32(seed());
+}
+function choice(rng, arr) { return arr[Math.floor(rng() * arr.length)]; }
+function roll(rng, min, max) { return Math.floor(rng() * (max - min + 1)) + min; }
+
+/* ==== Data pools ==== */
+const RACES = ["Human", "Elf", "Dwarf", "Orc", "Tiefling", "Halfling"];
+const BACKGROUNDS = [
+  "Exiled scholar",
+  "Former legion scout",
+  "Street alchemist",
+  "Temple orphan",
+  "Runaway noble",
+  "Wandering bard"
 ];
+const SKILLS = ["Swordplay", "Archery", "Stealth", "Runes", "Herbalism", "Intuition"];
+const TRAITS = ["Cautious", "Brave", "Merciful", "Ruthless", "Stoic", "Curious"];
+const LOCATIONS = [
+  "Emberford", "Gloomfen", "Sable Ridge", "Ashen Spire",
+  "Whisper Marsh", "Sunless Bazaar", "Hollowgate", "Mistral Keep"
+];
+const MONSTER_TYPES = ["Wraith", "Bandit", "Bog Serpent", "Bone Stalker", "Wild Ghoul", "Hexed Wolf"];
+const NPC_ARCH = ["Warden", "Archivist", "Smuggler", "Hermit", "Knight Errant", "Rune Weaver"];
+const EQUIPS = ["Rusty Dagger", "Oak Bow", "Iron Sword", "Leather Armor", "Charm Pendant", "Healer's Kit"];
+const ITEMS = ["Ration", "Tonic", "Smoke Bomb", "Lockpick", "Old Map", "Silver Coin"];
+const GOALS = [
+  "Recover a lost relic",
+  "Deliver a cryptic message",
+  "Hunt a marked beast",
+  "Find a missing heir",
+  "Decode a rune tablet",
+  "Escort a pilgrim safely"
+];
+const WORLD_ERAS = ["Age of Ash", "Shattered Concord", "Veilstorms", "Silent Harvest", "Lunar War"];
 
-function npcEncounter(){
-  let npc = pick(npcTemplates);
-  render(
-    `${npc.name}:\n"${npc.intro}"\n${npc.react()}`,
-    [
-      {t:"Nghe tiếp", a:()=>{
-        worldMemory.cycles+=0.5;
-        saveWorld();
-        encounter();
-      }},
-      {t:"Rời đi", a:encounter}
-    ]
-  );
-}
-
-// ================== COMBAT ==================
-function fight(enemy){
-  enemy.hp -= player.dmg;
-  player.hp -= enemy.dmg;
-  worldMemory.violence++;
-
-  if(player.hp<=0){
-    endCycle("Bạn gục ngã. Thế giới nhớ bạn như một kẻ bạo lực.");
-    return;
+/* ==== Persistent storage ==== */
+const LS = {
+  getSeed() { return localStorage.getItem("rl_world_seed"); },
+  setSeed(v) { localStorage.setItem("rl_world_seed", v); },
+  getHistory(seed) {
+    const raw = localStorage.getItem("rl_history_" + seed);
+    return raw ? JSON.parse(raw) : { deaths: [], events: [] };
+  },
+  setHistory(seed, obj) {
+    localStorage.setItem("rl_history_" + seed, JSON.stringify(obj));
+  },
+  pushRun(seed, run) {
+    const key = "rl_runs_" + seed;
+    const raw = localStorage.getItem(key);
+    const arr = raw ? JSON.parse(raw) : [];
+    arr.push(run);
+    localStorage.setItem(key, JSON.stringify(arr));
   }
-  if(enemy.hp<=0){
-    render(
-      `${enemy.name} tan rã.`,
-      [{t:"Tiếp tục", a:encounter}]
-    );
-    return;
+};
+
+/* ==== Game State ==== */
+const State = {
+  rng: null,
+  seed: null,
+  world: null,
+  year: null,
+  player: null,
+  location: null,
+  hp: 0,
+  maxHp: 0,
+  stamina: 0,
+  inventory: [],
+  equip: { weapon: null, armor: null, trinket: null },
+  objective: null,
+  flags: { warnedDanger: false },
+  history: null
+};
+
+/* ==== World & character generation ==== */
+function initWorld() {
+  // World seed: stable, or create one
+  let seed = LS.getSeed();
+  if (!seed) {
+    seed = "world-" + Math.random().toString(36).slice(2, 8);
+    LS.setSeed(seed);
   }
-  render(
-    `Giao tranh với ${enemy.name}
-HP địch: ${enemy.hp}`,
-    [{t:"Đánh tiếp", a:()=>fight(enemy)}]
-  );
+  State.seed = seed;
+  State.rng = makeRNG(seed);
+  // Era + base lore
+  const era = choice(State.rng, WORLD_ERAS);
+  const baseline = {
+    era,
+    climate: choice(State.rng, ["dry", "misty", "stormy", "chill"]),
+    magic: choice(State.rng, ["waning", "unstable", "forbidden", "thriving"]),
+    factions: ["Ashen Ward", "Veilcartel", "Moon Choir"].sort(() => State.rng() - 0.5)
+  };
+  State.world = baseline;
+  // Year random every run (can go backward or forward)
+  State.year = roll(State.rng, 70, 210); // ví dụ: trong khung 70–210
+  // Location random every run
+  State.location = choice(State.rng, LOCATIONS);
+  // Load history
+  State.history = LS.getHistory(seed);
 }
 
-function talkEnemy(enemy){
-  player.mp -= 2;
-  if(player.mp<0){
-    endCycle("Bạn cạn ma lực và bị nuốt chửng.");
-    return;
-  }
-  render(
-    `${enemy.name} do dự rồi rút lui.
-Lịch sử lệch đi một chút.`,
-    [{t:"Tiếp tục", a:encounter}]
-  );
+function genCharacter() {
+  const rng = makeRNG(State.seed + "-run-" + Math.random().toString(36).slice(2,7));
+  const race = choice(rng, RACES);
+  const bg = choice(rng, BACKGROUNDS);
+  const traits = [choice(rng, TRAITS), choice(rng, TRAITS)];
+  const skills = [choice(rng, SKILLS), choice(rng, SKILLS)];
+  const base = 6 + roll(rng, 0, 4);
+  State.maxHp = base + (traits.includes("Stoic") ? 2 : 0);
+  State.hp = State.maxHp;
+  State.stamina = 3 + roll(rng, 0, 3);
+  State.player = { name: genName(rng, race), race, bg, traits, skills };
+  State.objective = choice(rng, GOALS);
+  // Starter gear
+  State.equip.weapon = choice(rng, ["Rusty Dagger", "Iron Sword", "Oak Bow"]);
+  State.equip.armor = choice(rng, ["Leather Armor", null]);
+  State.equip.trinket = choice(rng, ["Charm Pendant", null]);
+  State.inventory = [
+    choice(rng, ITEMS),
+    choice(rng, ITEMS),
+    "Ration"
+  ];
 }
 
-// ================== ENCOUNTER ==================
-function encounter(){
-  if(Math.random()<0.3){
-    npcEncounter();
-    return;
-  }
-  let enemy = generateMonster();
-  render(
-    `Một ${enemy.name} xuất hiện.
-${enemy.lore}`,
-    [
-      {t:"Tấn công", a:()=>fight(enemy)},
-      {t:"Giao tiếp", a:()=>talkEnemy(enemy)}
-    ]
-  );
+function genName(rng, race) {
+  const syll = {
+    Human: ["Al", "Cor", "Mar", "Eli", "Ren", "Sam", "Jon", "Mae"],
+    Elf: ["Ae", "El", "Lae", "Syl", "Tha", "Vael", "Eri"],
+    Dwarf: ["Brom", "Dur", "Thra", "Gim", "Rok", "Harn"],
+    Orc: ["Gor", "Ur", "Thok", "Zar", "Mog", "Krug"],
+    Tiefling: ["Zea", "Nyx", "Var", "Kael", "Ira", "Vex"],
+    Halfling: ["Pip", "Merry", "Ros", "Fin", "Cob", "Tali"]
+  }[race] || ["Ash", "Rei", "Sol", "Kai"];
+  return choice(rng, syll) + choice(rng, ["", "an", "or", "is", "en", "ia"]);
 }
 
-// ================== END / RENDER ==================
-function saveWorld(){
-  localStorage.setItem("worldMemory",JSON.stringify(worldMemory));
+/* ==== UI helpers ==== */
+const logEl = document.getElementById("log");
+function log(txt, cls="") {
+  const p = document.createElement("p");
+  p.textContent = txt;
+  if (cls) p.classList.add(cls);
+  logEl.appendChild(p);
+  logEl.scrollTop = logEl.scrollHeight;
 }
-
-function updateStats(){
-  document.getElementById("stats").innerText =
-`Thân phận: ${player.origin}
-HP: ${player.hp} | MP: ${player.mp} | DMG: ${player.dmg}
-Chu kỳ đã qua: ${worldMemory.cycles}`;
-}
-
-function render(text, choices){
-  document.getElementById("scene").innerText = text;
-  let c = document.getElementById("choices");
-  c.innerHTML="";
-  choices.forEach(ch=>{
-    let b=document.createElement("button");
-    b.innerText=ch.t;
-    b.onclick=ch.a;
-    c.appendChild(b);
+function setHTML(id, html) { document.getElementById(id).innerHTML = html; }
+function setActions(btns) {
+  const root = document.getElementById("actions");
+  root.innerHTML = "";
+  btns.forEach(b => {
+    const btn = document.createElement("button");
+    btn.textContent = b.label;
+    if (b.class) btn.classList.add(b.class);
+    btn.onclick = b.onClick;
+    root.appendChild(btn);
   });
-  updateStats();
 }
 
-function endCycle(msg){
-  worldMemory.cycles++;
-  saveWorld();
-  render(
-    msg,
-    [{t:"Bắt đầu chu kỳ mới", a:()=>location.reload()}]
+/* ==== Render panels ==== */
+function renderIntro() {
+  setHTML("intro",
+    `<div class="row">
+      <span class="tag">Era: ${State.world.era}</span>
+      <span class="tag">Year: ${State.year}</span>
+      <span class="tag">Location: ${State.location}</span>
+    </div>
+    <p class="small">Magic is ${State.world.magic}; climate feels ${State.world.climate}. Factions whisper: ${State.world.factions.join(", ")}.</p>`
+  );
+}
+function renderChar() {
+  const p = State.player;
+  setHTML("char",
+    `<h3>Nhân vật</h3>
+     <div><strong>${p.name}</strong> — ${p.race}, ${p.bg}</div>
+     <div class="statgrid">
+       <div>Traits: ${p.traits.join(", ")}</div>
+       <div>Skills: ${p.skills.join(", ")}</div>
+     </div>
+     <div class="statgrid">
+       <div>HP: ${State.hp}/${State.maxHp}</div>
+       <div>Stamina: ${State.stamina}</div>
+     </div>
+     <div class="divider"></div>
+     <div>Mục tiêu: ${State.objective}</div>`
+  );
+}
+function renderWorld() {
+  setHTML("world",
+    `<h3>Thế giới</h3>
+     <div>Seed: <span class="small">${State.seed}</span></div>
+     <div class="statgrid">
+       <div>Era: ${State.world.era}</div>
+       <div>Year: ${State.year}</div>
+     </div>
+     <div>Factions: ${State.world.factions.join(", ")}</div>`
+  );
+}
+function renderStatus() {
+  setHTML("status",
+    `<h3>Trang bị</h3>
+     <div class="equip">
+       <div>Vũ khí: ${State.equip.weapon || "—"}</div>
+       <div>Giáp: ${State.equip.armor || "—"}</div>
+       <div>Bùa: ${State.equip.trinket || "—"}</div>
+     </div>`
+  );
+}
+function renderInv() {
+  setHTML("inventory",
+    `<h3>Túi đồ</h3>
+     <div class="inv">${State.inventory.map(i => `<div>• ${i}</div>`).join("") || "<div>Trống</div>"}</div>`
+  );
+}
+function renderHistoryPanel() {
+  const h = State.history;
+  const deaths = h.deaths.slice(-5).map(d => `${d.location} (năm ${d.year})`).join("; ");
+  const events = h.events.slice(-5).map(e => `${e.type} — ${e.location} (năm ${e.year})`).join("; ");
+  setHTML("historyPanel",
+    `<h3>Lịch sử thế giới</h3>
+     <div><strong>Tử vong gần đây:</strong> ${deaths || "—"}</div>
+     <div><strong>Sự kiện:</strong> ${events || "—"}</div>`
   );
 }
 
-// ================== START ==================
-render(
-  "Bạn tỉnh dậy giữa tàn tích.
-Thế giới không chắc bạn là ai.",
-  [
-    {t:"Tiến lên", a:encounter},
-    {t:"Nhìn lại bản thân", a:encounter}
-  ]
-);
-</script>
+/* ==== Event system ==== */
+function startRun() {
+  log(`Bạn thức dậy tại ${State.location}, năm ${State.year} — kỷ nguyên ${State.world.era}.`, "sys");
+  // Contextual warning if past death exists in same location
+  const danger = State.history.deaths.find(d => d.location === State.location && d.year <= State.year);
+  if (danger && !State.flags.warnedDanger) {
+    log(`NPC thì thầm: “Trước đây, kẻ như ngươi đã bỏ mạng ở ${danger.location}, năm ${danger.year}. Cẩn thận.”`, "warn");
+    State.flags.warnedDanger = true;
+  }
+  // First choices
+  presentExploration();
+}
 
+function presentExploration() {
+  renderPanels();
+  setActions([
+    { label: "Khảo sát khu vực", class: "primary", onClick: explore },
+    { label: "Tìm NPC", onClick: meetNPC },
+    { label: "Di chuyển sang khu khác", onClick: travel },
+    { label: "Kiểm tra túi đồ", onClick: () => { renderInv(); log("Bạn kiểm tra lại trang bị và vật dụng.", "sys"); } }
+  ]);
+}
+
+function explore() {
+  const rng = State.rng;
+  const encounter = choice(rng, ["monster", "findItem", "worldEvent"]);
+  if (encounter === "monster") {
+    const type = choice(rng, MONSTER_TYPES);
+    log(`Bạn chạm trán ${type} ở rìa ${State.location}!`, "bad");
+    startCombat(type);
+  } else if (encounter === "findItem") {
+    const item = choice(rng, ITEMS);
+    State.inventory.push(item);
+    renderInv();
+    log(`Bạn nhặt được: ${item}.`, "good");
+    presentExploration();
+  } else {
+    const e = { type: "Calamity", location: State.location, year: State.year };
+    State.history.events.push(e);
+    LS.setHistory(State.seed, State.history);
+    log(`Một biến cố nhỏ đã xảy ra ở ${State.location}. Dân địa phương nói về nó nhiều năm sau...`, "warn");
+    presentExploration();
+  }
+}
+
+function meetNPC() {
+  const rng = State.rng;
+  const arch = choice(rng, NPC_ARCH);
+  log(`Bạn gặp ${arch} lạ mặt trong bóng tối của ${State.location}.`);
+  setActions([
+    { label: "Xin trợ giúp", class: "primary", onClick: () => npcOutcome(arch, "help") },
+    { label: "Thương lượng trao đổi", onClick: () => npcOutcome(arch, "trade") },
+    { label: "Đe dọa", class: "danger", onClick: () => npcOutcome(arch, "threat") },
+    { label: "Rời đi", onClick: presentExploration }
+  ]);
+}
+
+function npcOutcome(arch, action) {
+  const rng = State.rng;
+  const friendly = rng() > 0.35 && action !== "threat";
+  if (friendly) {
+    if (action === "help") {
+      const gift = choice(rng, ["Tonic", "Healer's Kit", "Charm Pendant"]);
+      State.inventory.push(gift);
+      renderInv();
+      log(`${arch} tặng bạn ${gift} và cảnh báo: "Tránh xa bờ đầm vào ban đêm."`, "good");
+    } else if (action === "trade") {
+      const offer = choice(rng, EQUIPS);
+      log(`${arch} đề nghị đổi lấy ${offer}. Bạn đánh liều?`, "sys");
+      setActions([
+        { label: "Đồng ý (mất 1 vật ngẫu nhiên)", class: "primary", onClick: () => {
+          const lost = State.inventory.length ? State.inventory.splice(Math.floor(rng()*State.inventory.length),1)[0] : null;
+          equipGain(offer);
+          renderInv();
+          log(`Bạn mất ${lost || "chẳng có gì"} và nhận ${offer}.`, "good");
+          presentExploration();
+        }},
+        { label: "Từ chối", onClick: presentExploration }
+      ]);
+      return;
+    } else {
+      log(`${arch} nhìn bạn lạnh lùng, nhưng bỏ qua xung đột.`, "sys");
+    }
+    presentExploration();
+  } else {
+    log(`${arch} nổi giận: “Ngươi sẽ hối hận!”`, "bad");
+    startCombat(arch + " (hostile)");
+  }
+}
+
+function equipGain(item) {
+  if (item.includes("Sword") || item.includes("Dagger") || item.includes("Bow")) State.equip.weapon = item;
+  else if (item.includes("Armor")) State.equip.armor = item;
+  else State.equip.trinket = item;
+  renderStatus();
+}
+
+/* ==== Travel ==== */
+function travel() {
+  const rng = State.rng;
+  const dest = choice(rng, LOCATIONS.filter(l => l !== State.location));
+  log(`Bạn di chuyển từ ${State.location} tới ${dest}.`, "sys");
+  State.location = dest;
+  // Time shifts: world timeline can jump back or forward
+  const delta = roll(rng, -7, 9);
+  State.year = Math.max(1, State.year + delta);
+  renderIntro();
+  presentExploration();
+}
+
+/* ==== Combat system ==== */
+function weaponPower() {
+  const w = State.equip.weapon || "";
+  if (w.includes("Iron Sword")) return 3;
+  if (w.includes("Oak Bow")) return 2;
+  if (w.includes("Rusty Dagger")) return 1;
+  return 1;
+}
+function skillBonus() {
+  let b = 0;
+  if (State.player.skills.includes("Swordplay")) b += 1;
+  if (State.player.skills.includes("Archery")) b += 1;
+  if (State.player.skills.includes("Runes")) b += 1;
+  return b;
+}
+function armorMitigation() {
+  const a = State.equip.armor || "";
+  if (a.includes("Leather Armor")) return 1;
+  return 0;
+}
+
+function startCombat(enemy) {
+  const rng = State.rng;
+  const enemyHp = roll(rng, 4, 8);
+  let eHP = enemyHp;
+  log(`Chiến đấu bắt đầu với ${enemy} (HP ${eHP}).`, "sys");
+  function renderCombat() {
+    renderPanels();
+    setActions([
+      { label: "Tấn công", class: "primary", onClick: attack },
+      { label: "Dùng vật phẩm", onClick: useItem },
+      { label: "Phòng thủ", onClick: defend },
+      { label: "Tháo chạy", class: "danger", onClick: flee }
+    ]);
+  }
+  function attack() {
+    const dmg = 1 + weaponPower() + skillBonus() + roll(State.rng, 0,1);
+    eHP = Math.max(0, eHP - dmg);
+    log(`Bạn gây ${dmg} sát thương. ${enemy} còn ${eHP} HP.`, "good");
+    if (eHP <= 0) return win();
+    enemyTurn();
+  }
+  function useItem() {
+    const idx = State.inventory.findIndex(i => ["Tonic", "Healer's Kit", "Ration"].includes(i));
+    if (idx === -1) { log("Không có vật phẩm hồi phục.", "sys"); return renderCombat(); }
+    const item = State.inventory.splice(idx,1)[0];
+    const heal = item === "Healer's Kit" ? 4 : item === "Tonic" ? 3 : 2;
+    State.hp = Math.min(State.maxHp, State.hp + heal);
+    renderInv(); renderChar();
+    log(`Bạn sử dụng ${item}, hồi ${heal} HP.`, "good");
+    enemyTurn();
+  }
+  function defend() {
+    log("Bạn củng cố thế thủ, giảm sát thương nhận vào.", "sys");
+    enemyTurn(true);
+  }
+  function flee() {
+    const ok = State.stamina > 0 && State.rng() > 0.35;
+    State.stamina = Math.max(0, State.stamina - 1);
+    if (ok) { log("Bạn thoát khỏi giao tranh.", "good"); return presentExploration(); }
+    log("Bạn thất bại khi tháo chạy!", "bad");
+    enemyTurn();
+  }
+  function enemyTurn(defending=false) {
+    const dmg = roll(State.rng, 1, 3) - armorMitigation() - (defending ? 1 : 0);
+    const real = Math.max(0, dmg);
+    State.hp = Math.max(0, State.hp - real);
+    renderChar();
+    if (real > 0) log(`${enemy} tấn công, bạn mất ${real} HP.`, "bad");
+    if (State.hp <= 0) return onDeath(enemy);
+    renderCombat();
+  }
+  function win() {
+    const loot = choice(State.rng, ["Silver Coin", "Old Map", "Smoke Bomb", "Lockpick"]);
+    State.inventory.push(loot);
+    renderInv();
+    log(`Bạn đánh bại ${enemy}! Nhặt được ${loot}.`, "good");
+    presentExploration();
+  }
+  renderCombat();
+}
+
+function onDeath(by) {
+  log(`Bạn đã tử nạn bởi ${by} tại ${State.location}, năm ${State.year}.`, "bad");
+  State.history.deaths.push({ location: State.location, year: State.year, by });
+  LS.setHistory(State.seed, State.history);
+  LS.pushRun(State.seed, {
+    name: State.player.name,
+    objective: State.objective,
+    died: { location: State.location, year: State.year, by }
+  });
+  setActions([
+    { label: "Chơi lại (cùng thế giới)", class: "primary", onClick: restartSameWorld },
+    { label: "Tạo thế giới mới", onClick: newWorld }
+  ]);
+}
+
+function restartSameWorld() {
+  // Keep seed, regenerate run
+  State.flags.warnedDanger = false;
+  initWorld(); // re-randomize location & year within world
+  genCharacter();
+  renderPanels();
+  startRun();
+}
+
+function newWorld() {
+  localStorage.removeItem("rl_world_seed");
+  State.flags.warnedDanger = false;
+  initWorld();
+  genCharacter();
+  renderPanels();
+  startRun();
+}
+
+/* ==== Panels refresh ==== */
+function renderPanels() {
+  renderIntro();
+  renderChar();
+  renderWorld();
+  renderStatus();
+  renderInv();
+  renderHistoryPanel();
+}
+
+/* ==== Bootstrap ==== */
+(function boot() {
+  initWorld();
+  genCharacter();
+  renderPanels();
+  startRun();
+})();
+</script>
 </body>
 </html>
