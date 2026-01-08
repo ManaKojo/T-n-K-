@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <title>Chronicles of Ashen Realms — Text RPG Roguelike</title>
+  <title>Biên Niên Sử Vùng Tro Tàn — Text RPG</title>
   <style>
     body { font-family:sans-serif; background:#111; color:#eee; margin:0; }
     header { background:#222; padding:10px; }
@@ -18,7 +18,7 @@
   </style>
 </head>
 <body>
-<header><h1>Chronicles of Ashen Realms</h1></header>
+<header><h1>Biên Niên Sử Vùng Tro Tàn</h1></header>
 <main>
   <div class="left">
     <div id="intro"></div>
@@ -35,19 +35,26 @@
 </main>
 
 <script>
-/* ==== State ==== */
-const State={player:null,hp:10,maxHp:10,inventory:["Ration","Tonic"],inCombat:false,combatEnemy:null,history:{deaths:[],events:[],legends:[]}};
+/* ==== Trạng thái ==== */
+const State={
+  player:null,
+  hp:10,maxHp:10,
+  inventory:["Lương khô","Thuốc bổ"],
+  inCombat:false,combatEnemy:null,
+  quest:null,npc:null,
+  history:{deaths:[],events:[],legends:[]}
+};
 
-/* ==== UI helpers ==== */
+/* ==== Hàm tiện ích ==== */
 function log(msg,cls=""){const el=document.getElementById("log");const p=document.createElement("p");p.textContent=msg;if(cls)p.className=cls;el.appendChild(p);el.scrollTop=el.scrollHeight;}
 function setActions(btns){const root=document.getElementById("actions");root.innerHTML="";btns.forEach(b=>{const btn=document.createElement("button");btn.textContent=b.label;if(b.class)btn.classList.add(b.class);btn.onclick=b.onClick;root.appendChild(btn);});}
 
-/* ==== Renderers ==== */
+/* ==== Hiển thị ==== */
 function renderIntro(){document.getElementById("intro").innerHTML=`<p>Bạn là ${State.player}. HP: ${State.hp}/${State.maxHp}</p>`;}
 function renderChar(){document.getElementById("char").innerHTML=`<h3>Nhân vật</h3><p>${State.player}</p><p>HP: ${State.hp}/${State.maxHp}</p>`;}
-function renderInv(){document.getElementById("inventory").innerHTML=`<h3>Túi đồ</h3>${State.inventory.map((i,idx)=>`<div>${i} <button onclick="useItem(${idx})">Use</button></div>`).join("")}`;}
-function renderQuest(){document.getElementById("questPanel").innerHTML=`<h3>Nhiệm vụ</h3><p>${State.quest?State.quest.title:"Chưa có"}</p>`;}
-function renderNPC(){document.getElementById("npcPanel").innerHTML=`<h3>NPC</h3><p>${State.npc?State.npc.name:"Chưa gặp"}</p>`;}
+function renderInv(){document.getElementById("inventory").innerHTML=`<h3>Túi đồ</h3>${State.inventory.map((i,idx)=>`<div>${i} <button onclick="useItem(${idx})">Dùng</button></div>`).join("")}`;}
+function renderQuest(){document.getElementById("questPanel").innerHTML=`<h3>Nhiệm vụ</h3><p>${State.quest?State.quest:"Chưa có"}</p>`;}
+function renderNPC(){document.getElementById("npcPanel").innerHTML=`<h3>NPC</h3><p>${State.npc?State.npc:"Chưa gặp"}</p>`;}
 function renderHistory(){
   const h=State.history||{deaths:[],events:[],legends:[]};
   const deaths=(h.deaths||[]).slice(-5).map(d=>`${d.location} (${d.year})`).join("; ");
@@ -62,20 +69,20 @@ function returnToHub(){
   renderPanels();
   setActions([
     {label:"Khảo sát",class:"primary",onClick:explore},
-    {label:"Tìm NPC",onClick:meetNPC},
+    {label:"Gặp NPC",onClick:meetNPC},
     {label:"Di chuyển",onClick:travel},
     {label:"Mở túi đồ",onClick:()=>{renderInv();log("Bạn mở túi đồ.");setActions([{label:"Trở về",onClick:returnToHub}]);}}
   ]);
 }
 
-/* ==== Actions ==== */
+/* ==== Hành động ==== */
 function explore(){log("Bạn khảo sát khu vực...");setActions([{label:"Trở về",onClick:returnToHub}]);}
-function meetNPC(){State.npc={name:"Aeris Dawnfall"};log("Bạn gặp NPC: Aeris Dawnfall.");renderNPC();setActions([{label:"Trở về",onClick:returnToHub}]);}
+function meetNPC(){State.npc="Aeris Dawnfall";log("Bạn gặp NPC: Aeris Dawnfall.");renderNPC();setActions([{label:"Trở về",onClick:returnToHub}]);}
 function travel(){log("Bạn di chuyển tới vùng đất khác.");setActions([{label:"Trở về",onClick:returnToHub}]);}
 function useItem(idx){
   const item=State.inventory[idx];
-  if(item==="Ration"){State.hp=Math.min(State.maxHp,State.hp+2);log("Bạn ăn Ration, hồi 2 HP.");}
-  if(item==="Tonic"){State.hp=Math.min(State.maxHp,State.hp+3);log("Bạn uống Tonic, hồi 3 HP.");}
+  if(item==="Lương khô"){State.hp=Math.min(State.maxHp,State.hp+2);log("Bạn ăn lương khô, hồi 2 HP.");}
+  if(item==="Thuốc bổ"){State.hp=Math.min(State.maxHp,State.hp+3);log("Bạn uống thuốc bổ, hồi 3 HP.");}
   State.inventory.splice(idx,1);
   renderInv();renderChar();
   State.inCombat?returnToCombat():returnToHub();
@@ -97,8 +104,17 @@ function defend(){log("Bạn thủ thế.");enemyTurn(true);}
 function flee(){log("Bạn tháo chạy!");State.inCombat=false;returnToHub();}
 function enemyTurn(defending=false){const dmg=defending?1:2;State.hp-=dmg;log(`${State.combatEnemy.name} tấn công, bạn mất ${dmg} HP.`);renderChar();if(State.hp<=0){log("Bạn đã tử nạn.");State.inCombat=false;setActions([{label:"Chơi lại",class:"primary",onClick:boot}]);}else{returnToCombat();}}
 
-/* ==== Boot ==== */
-function boot(){State.player="Nhân vật";State.hp=10;State.maxHp=10;State.inventory=["Ration","Tonic"];State.quest=null;State.npc=null;State.history={deaths:[],events:[],legends:[]};document.getElementById("log").innerHTML="";log("Khởi đầu hành trình...");returnToHub();}
+/* ==== Khởi động ==== */
+function boot(){
+  State.player="Nhân vật";
+  State.hp=10;State.maxHp=10;
+  State.inventory=["Lương khô","Thuốc bổ"];
+  State.quest=null;State.npc=null;
+  State.history={deaths:[],events:[],legends:[]};
+  document.getElementById("log").innerHTML="";
+  log("Khởi đầu hành trình...");
+  returnToHub(); // đảm bảo nút xuất hiện ngay từ đầu
+}
 boot();
 </script>
 </body>
