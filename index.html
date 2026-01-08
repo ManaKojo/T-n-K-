@@ -3,20 +3,247 @@
 <head>
 <meta charset="UTF-8">
 <title>Tàn Dư Ký Lục</title>
-<link rel="stylesheet" href="style.css">
+<style>
+body {
+  background:#111;
+  color:#eee;
+  font-family:monospace;
+  display:flex;
+  justify-content:center;
+  padding-top:30px;
+}
+#game {
+  width:520px;
+  border:1px solid #444;
+  padding:15px;
+}
+#stats {
+  font-size:14px;
+  white-space:pre-line;
+  margin-bottom:10px;
+}
+#scene {
+  min-height:120px;
+  margin-bottom:10px;
+  white-space:pre-line;
+}
+button {
+  width:100%;
+  margin:5px 0;
+  background:#222;
+  color:#eee;
+  border:1px solid #555;
+  padding:6px;
+  cursor:pointer;
+}
+button:hover { background:#333; }
+</style>
 </head>
 <body>
 
 <div id="game">
   <h1>TÀN DƯ KÝ LỤC</h1>
-
   <div id="stats"></div>
-
   <div id="scene"></div>
-
   <div id="choices"></div>
 </div>
 
-<script src="game.js"></script>
+<script>
+// ================== WORLD MEMORY ==================
+let worldMemory = JSON.parse(localStorage.getItem("worldMemory")) || {
+  cycles: 0,
+  violence: 0
+};
+
+let spawnedMonsters = JSON.parse(localStorage.getItem("spawnedMonsters")) || [];
+
+// ================== UTILS ==================
+const rand = (a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+
+// ================== PLAYER ==================
+function createPlayer(){
+  const origins = [
+    "kẻ đào tẩu",
+    "lính gác cũ",
+    "học đồ pháp sư",
+    "kẻ không có ký ức"
+  ];
+  return {
+    origin: pick(origins),
+    hp: 20,
+    mp: 10,
+    dmg: 4,
+    inventory:[]
+  };
+}
+let player = createPlayer();
+
+// ================== MONSTERS ==================
+const monsterParts = {
+  prefix:["Tàn","Hủ","Lệch","Vọng","Méo","Câm"],
+  core:["Thể","Ảnh","Xác","Bóng","Dư Ảnh"],
+  suffix:["Lang Thang","Sai Lệch","Bị Quên","Không Tên","Mất Trí"]
+};
+
+function monsterLore(){
+  if(worldMemory.violence > worldMemory.cycles)
+    return "Nó mang dấu tích của bạo lực tích tụ qua các chu kỳ.";
+  if(worldMemory.cycles > 2)
+    return "Sinh vật này dường như nhớ những lần bạn chết.";
+  return "Một thực thể mới sinh ra từ tàn dư thế giới.";
+}
+
+function generateMonster(){
+  let name;
+  do {
+    name = pick(monsterParts.prefix)+" "+pick(monsterParts.core)+" "+pick(monsterParts.suffix);
+  } while(spawnedMonsters.includes(name));
+
+  spawnedMonsters.push(name);
+  localStorage.setItem("spawnedMonsters",JSON.stringify(spawnedMonsters));
+
+  let base = 6 + worldMemory.cycles*2;
+
+  return {
+    name,
+    hp: base + rand(0,5),
+    dmg: 2 + rand(0,worldMemory.cycles+2),
+    lore: monsterLore()
+  };
+}
+
+// ================== NPC ==================
+const npcTemplates = [
+  {
+    name:"Người Ghi Chép",
+    intro:"Ta ghi lại lịch sử, dù nó liên tục tự mâu thuẫn.",
+    react:()=>worldMemory.cycles>0
+      ? "Ngươi đã từng tồn tại trong bản ghi cũ."
+      : "Lịch sử chưa từng nhắc tới ngươi."
+  },
+  {
+    name:"Kẻ Lưu Lạc",
+    intro:"Ta tìm ký ức của mình trong tàn tích.",
+    react:()=>worldMemory.violence>2
+      ? "Ngươi mang mùi máu."
+      : "Ngươi chưa bị thế giới bẻ gãy."
+  }
+];
+
+function npcEncounter(){
+  let npc = pick(npcTemplates);
+  render(
+    `${npc.name}:\n"${npc.intro}"\n${npc.react()}`,
+    [
+      {t:"Nghe tiếp", a:()=>{
+        worldMemory.cycles+=0.5;
+        saveWorld();
+        encounter();
+      }},
+      {t:"Rời đi", a:encounter}
+    ]
+  );
+}
+
+// ================== COMBAT ==================
+function fight(enemy){
+  enemy.hp -= player.dmg;
+  player.hp -= enemy.dmg;
+  worldMemory.violence++;
+
+  if(player.hp<=0){
+    endCycle("Bạn gục ngã. Thế giới nhớ bạn như một kẻ bạo lực.");
+    return;
+  }
+  if(enemy.hp<=0){
+    render(
+      `${enemy.name} tan rã.`,
+      [{t:"Tiếp tục", a:encounter}]
+    );
+    return;
+  }
+  render(
+    `Giao tranh với ${enemy.name}
+HP địch: ${enemy.hp}`,
+    [{t:"Đánh tiếp", a:()=>fight(enemy)}]
+  );
+}
+
+function talkEnemy(enemy){
+  player.mp -= 2;
+  if(player.mp<0){
+    endCycle("Bạn cạn ma lực và bị nuốt chửng.");
+    return;
+  }
+  render(
+    `${enemy.name} do dự rồi rút lui.
+Lịch sử lệch đi một chút.`,
+    [{t:"Tiếp tục", a:encounter}]
+  );
+}
+
+// ================== ENCOUNTER ==================
+function encounter(){
+  if(Math.random()<0.3){
+    npcEncounter();
+    return;
+  }
+  let enemy = generateMonster();
+  render(
+    `Một ${enemy.name} xuất hiện.
+${enemy.lore}`,
+    [
+      {t:"Tấn công", a:()=>fight(enemy)},
+      {t:"Giao tiếp", a:()=>talkEnemy(enemy)}
+    ]
+  );
+}
+
+// ================== END / RENDER ==================
+function saveWorld(){
+  localStorage.setItem("worldMemory",JSON.stringify(worldMemory));
+}
+
+function updateStats(){
+  document.getElementById("stats").innerText =
+`Thân phận: ${player.origin}
+HP: ${player.hp} | MP: ${player.mp} | DMG: ${player.dmg}
+Chu kỳ đã qua: ${worldMemory.cycles}`;
+}
+
+function render(text, choices){
+  document.getElementById("scene").innerText = text;
+  let c = document.getElementById("choices");
+  c.innerHTML="";
+  choices.forEach(ch=>{
+    let b=document.createElement("button");
+    b.innerText=ch.t;
+    b.onclick=ch.a;
+    c.appendChild(b);
+  });
+  updateStats();
+}
+
+function endCycle(msg){
+  worldMemory.cycles++;
+  saveWorld();
+  render(
+    msg,
+    [{t:"Bắt đầu chu kỳ mới", a:()=>location.reload()}]
+  );
+}
+
+// ================== START ==================
+render(
+  "Bạn tỉnh dậy giữa tàn tích.
+Thế giới không chắc bạn là ai.",
+  [
+    {t:"Tiến lên", a:encounter},
+    {t:"Nhìn lại bản thân", a:encounter}
+  ]
+);
+</script>
+
 </body>
 </html>
