@@ -1,121 +1,620 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="UTF-8">
-  <title>Biên Niên Sử Vùng Tro Tàn — Text RPG</title>
+  <meta charset="UTF-8" />
+  <title>Biên Niên Sử Vùng Tro Tàn — Text RPG Roguelike</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family:sans-serif; background:#111; color:#eee; margin:0; }
-    header { background:#222; padding:10px; }
-    h1 { margin:0; font-size:20px; }
-    main { display:flex; }
-    .left { flex:2; padding:10px; }
-    .right { flex:1; padding:10px; background:#1a1a1a; }
-    .log { height:300px; overflow:auto; border:1px solid #333; padding:5px; margin-bottom:10px; }
-    .actions { display:grid; grid-template-columns:1fr 1fr; gap:5px; }
-    button { padding:8px; background:#333; color:#eee; border:none; cursor:pointer; }
-    button.primary { background:#2a4; }
-    button.danger { background:#a22; }
+    :root { --bg:#0f0f13; --panel:#17171e; --text:#e6e6e9; --muted:#a9a9b2; --accent:#6ee7b7; --danger:#ef4444; --warn:#f59e0b; --link:#93c5fd; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial; background: radial-gradient(1200px 500px at 10% 10%, #15151b, var(--bg)); color:var(--text); line-height:1.6; }
+    header { padding:16px; background: linear-gradient(90deg,#111,#15151b); border-bottom:1px solid #222532; }
+    header h1 { margin:0; font-size:20px; letter-spacing:0.5px; }
+    header small { color:var(--muted); }
+    main { max-width:1100px; margin:0 auto; padding:16px; display:grid; grid-template-columns: 1fr 360px; gap:16px; }
+    .panel { background:var(--panel); border:1px solid #222532; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,0.25); }
+    .left,.right { padding:14px; }
+    .log { height:52vh; overflow:auto; padding-right:6px; }
+    .log p { margin:6px 0; }
+    .log .sys { color:var(--muted); }
+    .log .good { color:var(--accent); }
+    .log .bad { color:var(--danger); }
+    .log .warn { color:var(--warn); }
+    .actions { display:grid; grid-template-columns: repeat(2,1fr); gap:8px; margin-top:10px; }
+    button { background:#1f1f27; border:1px solid #2a2a36; color:var(--text); padding:10px 12px; border-radius:8px; cursor:pointer; }
+    button:hover { border-color:#3a3a48; }
+    .primary { background:#23302b; border-color:#2f4b3f; color:#ccefe0; }
+    .danger { background:#2c1f21; border-color:#542b32; color:#ffd6da; }
+    .muted { color:var(--muted); font-size:13px; }
+    .statgrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:14px; margin-top:6px; }
+    .tag { display:inline-block; padding:2px 8px; border:1px solid #2a2a36; border-radius:999px; font-size:12px; color:var(--muted); margin-right:6px; }
+    .divider { border-top:1px solid #232533; margin:8px 0; }
+    footer { max-width:1100px; margin:8px auto 24px; padding:0 16px; color:var(--muted); font-size:13px; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .inv,.equip { display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:14px; }
+    .small { font-size:13px; color:var(--muted); }
+    .quest { border:1px dashed #2a2a36; border-radius:8px; padding:8px; margin-top:6px; }
+    .legend { color:#d1c4ff; }
+    .affinity { color:#93c5fd; }
+    .fear { color:#fca5a5; }
+    a { color:var(--link); text-decoration:none; }
   </style>
 </head>
 <body>
-<header><h1>Biên Niên Sử Vùng Tro Tàn</h1></header>
+<header class="panel">
+  <h1>Biên Niên Sử Vùng Tro Tàn <small>— Text RPG Roguelike</small></h1>
+</header>
+
 <main>
-  <div class="left">
+  <section class="panel left">
     <div id="intro"></div>
+    <div class="divider"></div>
     <div class="log" id="log"></div>
-    <div class="actions" id="actions"></div>
-  </div>
-  <div class="right">
+    <div class="divider"></div>
+    <div id="actions" class="actions"></div>
+  </section>
+
+  <aside class="panel right">
     <div id="char"></div>
+    <div class="divider"></div>
+    <div id="world"></div>
+    <div class="divider"></div>
+    <div id="status"></div>
+    <div class="divider"></div>
     <div id="inventory"></div>
+    <div class="divider"></div>
     <div id="questPanel"></div>
+    <div class="divider"></div>
     <div id="npcPanel"></div>
+    <div class="divider"></div>
     <div id="historyPanel"></div>
-  </div>
+  </aside>
 </main>
 
+<footer>
+  Luôn hiển thị nút lựa chọn ở hub hoặc combat; lịch sử thế giới lưu theo seed trong localStorage.
+</footer>
+
 <script>
-/* ==== Trạng thái ==== */
-const State={
-  player:null,
-  hp:10,maxHp:10,
-  inventory:["Lương khô","Thuốc bổ"],
-  inCombat:false,combatEnemy:null,
-  quest:null,npc:null,
-  history:{deaths:[],events:[],legends:[]}
+/* ==== RNG ==== */
+function xmur3(str){let h=1779033703^str.length;for(let i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353);h=(h<<13)|(h>>>19);}return function(){h=Math.imul(h^(h>>>16),2246822507);h=Math.imul(h^(h>>>13),3266489909);h^=h>>>16;return h>>>0;}}
+function mulberry32(a){return function(){let t=a+=0x6D2B79F5;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296;}}
+function makeRNG(seedStr){const s=xmur3(seedStr);return mulberry32(s());}
+function choice(rng,arr){return arr[Math.floor(rng()*arr.length)];}
+function roll(rng,min,max){return Math.floor(rng()*(max-min+1))+min;}
+
+/* ==== Data pools (Việt hóa) ==== */
+const CHUNG_TOC=["Human","Elf","Dwarf","Orc","Tiefling","Halfling"];
+const XUAT_THAN=["Học giả bị lưu đày","Trinh sát quân đoàn","Giả kim sư đường phố","Trẻ mồ côi đền thờ","Quý tộc đào ngũ","Nghệ sĩ lang thang"];
+const KY_NANG=["Kiếm thuật","Cung thuật","Ẩn nấp","Rune","Thảo dược","Trực giác"];
+const DAC_TINH=["Thận trọng","Dũng cảm","Nhân hậu","Tàn nhẫn","Điềm tĩnh","Hiếu kỳ"];
+const NHAN_VAT_VU_KHI=["Dao","Cung","Kiếm"];
+const NHAN_VAT_GIAP=["Armor"];
+const DIA_DIEM=["Emberford","Gloomfen","Sable Ridge","Ashen Spire","Whisper Marsh","Sunless Bazaar","Hollowgate","Mistral Keep"];
+const QUAI=["Wraith","Bandit","Bog Serpent","Bone Stalker","Wild Ghoul","Hexed Wolf"];
+const VAI_TRO_NPC=["Warden","Archivist","Smuggler","Hermit","Kỵ sĩ lãng du","Pháp sư rune","Moon Cantor","Veil Broker","Lantern Bearer"];
+const TRANG_BI=["Rusty Dagger","Oak Bow","Iron Sword","Leather Armor","Charm Pendant","Healer's Kit"];
+const VAT_PHAM=["Lương khô","Thuốc bổ","Bom khói","Kìm mở khóa","Bản đồ cũ","Đồng bạc","Mảnh di vật","Bảng rune"];
+const MUC_TIEU=[
+  {id:"mt_relic", text:"Tìm lại một di vật bị thất lạc", questType:"relic"},
+  {id:"mt_rune", text:"Giải mã một bảng rune cổ", questType:"rune"},
+  {id:"mt_hunt", text:"Săn một hung thú được đánh dấu", questType:"hunt"},
+  {id:"mt_heir", text:"Tìm người thừa kế mất tích", questType:"escort"},
+  {id:"mt_msg", text:"Giao một bức thư bí mật", questType:"deliver"}
+];
+const KY_NGUYEN=["Thời đại Tro Tàn","Hòa ước vỡ nát","Bão Che Màn","Mùa gặt câm","Chiến tranh mặt trăng"];
+const TRAUMA=["Rắn","Tàn tích","Đầm lầy đêm","Bóng ma","Đám đông","Bão","Lửa","Bị bỏ rơi"];
+
+/* ==== Origin templates (tiểu thuyết) ==== */
+const ORIGINS=[
+  (p,y,l,o,t)=>`${p} sống sót sau thảm kịch chiến tranh năm ${y-11}: mái nhà cháy như mặt trời rơi, cha mẹ bị sát hại dưới lưỡi gươm vô danh. Từ tro tàn, ${p} thề sẽ ${o.text.toLowerCase()}. Hôm nay, ${p} xuất hiện ở quê nhà ${l}, nơi chuông gãy vẫn ngân.`,
+  (p,y,l,o,t)=>`Tuổi thơ của ${p} đằm thắm như mùa lúa chín, nhưng gia tộc chiến binh đòi công danh. ${p} rời mái nhà với ánh nhìn lạnh, mang theo lý tưởng ${o.text.toLowerCase()}. ${p} hiện ở chiến trường ${l}, nơi đất rung theo trống giục.`,
+  (p,y,l,o,t)=>`${p} lớn lên trong bóng tối của "${t}", ám ảnh bởi hình thù nửa đêm. ${p} chọn lên đường để ${o.text.toLowerCase()}, thử xem nỗi sợ đổi màu dưới ánh mặt trời. Bước chân đặt tới ${l}.`,
+  (p,y,l,o,t)=>`Năm ${y-6}, ${p} bị khai trừ khỏi Moon Choir vì đả phá một văn bản cổ. Những chữ cái móp méo nằm trong tim ${p}. ${p} đi để ${o.text.toLowerCase()}, và ${l} đón bằng mùi cỏ khô.`,
+  (p,y,l,o,t)=>`Trên bậc thềm Spire, ${p} thề tự do phải trả giá. Khi bão vỡ kính năm ${y-8}, ${p} hiểu cái giá ấy là máu. ${p} đến ${l} để ${o.text.toLowerCase()}, mắt chưa từng cúi.`,
+  (p,y,l,o,t)=>`${p} từng buôn lậu tại Sunless Bazaar, học cách chào bằng im lặng. Một lần thấy trẻ con kéo chân bóng tối, ${p} hiểu bóng tối đang lớn. ${p} tới ${l} để ${o.text.toLowerCase()}.`,
+  (p,y,l,o,t)=>`Ở Vigilant Docks năm ${y-10}, một người rơi khỏi mạn tàu, không ai nhớ tên. ${p} quyết định sẽ nhớ. Muốn nhớ đúng, ${p} phải ${o.text.toLowerCase()}. Và ${p} có mặt ở ${l}.`,
+  (p,y,l,o,t)=>`${p} bị bỏ lại trong đêm, chỉ có mưa làm bạn. Người ta tìm thấy ${p} dưới mái hiên, tay ôm mảnh bản đồ cháy sém. ${p} đi để ${o.text.toLowerCase()}, mang theo đường nét cháy đen đến ${l}.`,
+  (p,y,l,o,t)=>`Có người kể: "Ai giữ bí mật lâu quá sẽ bị bí mật đổi tên." ${p} thử đổi tên, nhưng đêm vẫn nhớ. ${p} xuất hiện ở ${l}, và lên đường để ${o.text.toLowerCase()}.`,
+  (p,y,l,o,t)=>`${p} được nuôi bởi những người không họ. Họ dạy ${p} lắng nghe gió qua sọ xám mùa gặt câm. Đến lúc, đôi tay run đặt lên đầu: "Đi đi." ${p} tới ${l}, để ${o.text.toLowerCase()}.`,
+];
+
+/* ==== Storage ==== */
+const LS={
+  getSeed(){return localStorage.getItem("rl_world_seed");},
+  setSeed(v){localStorage.setItem("rl_world_seed",v);},
+  getHistory(seed){
+    const raw=localStorage.getItem("rl_history_"+seed);
+    return raw?JSON.parse(raw):{deaths:[],events:[],legends:[]};
+  },
+  setHistory(seed,obj){localStorage.setItem("rl_history_"+seed,JSON.stringify(obj));},
+  pushRun(seed,run){
+    const k="rl_runs_"+seed;const raw=localStorage.getItem(k);
+    const arr=raw?JSON.parse(raw):[];arr.push(run);
+    localStorage.setItem(k,JSON.stringify(arr));
+  }
 };
 
-/* ==== Hàm tiện ích ==== */
-function log(msg,cls=""){const el=document.getElementById("log");const p=document.createElement("p");p.textContent=msg;if(cls)p.className=cls;el.appendChild(p);el.scrollTop=el.scrollHeight;}
-function setActions(btns){const root=document.getElementById("actions");root.innerHTML="";btns.forEach(b=>{const btn=document.createElement("button");btn.textContent=b.label;if(b.class)btn.classList.add(b.class);btn.onclick=b.onClick;root.appendChild(btn);});}
+/* ==== State ==== */
+const State={
+  rng:null, seed:null, world:null, year:null,
+  player:null, location:null,
+  hp:0, maxHp:0, stamina:0, fear:0, trauma:null,
+  inventory:[], equip:{weapon:null,armor:null,trinket:null},
+  objective:null, quest:null,
+  flags:{warnedDanger:false},
+  history:{deaths:[],events:[],legends:[]},
+  inCombat:false, combatCtx:null,
+  npcPersonal:null
+};
 
-/* ==== Hiển thị ==== */
-function renderIntro(){document.getElementById("intro").innerHTML=`<p>Bạn là ${State.player}. HP: ${State.hp}/${State.maxHp}</p>`;}
-function renderChar(){document.getElementById("char").innerHTML=`<h3>Nhân vật</h3><p>${State.player}</p><p>HP: ${State.hp}/${State.maxHp}</p>`;}
-function renderInv(){document.getElementById("inventory").innerHTML=`<h3>Túi đồ</h3>${State.inventory.map((i,idx)=>`<div>${i} <button onclick="useItem(${idx})">Dùng</button></div>`).join("")}`;}
-function renderQuest(){document.getElementById("questPanel").innerHTML=`<h3>Nhiệm vụ</h3><p>${State.quest?State.quest:"Chưa có"}</p>`;}
-function renderNPC(){document.getElementById("npcPanel").innerHTML=`<h3>NPC</h3><p>${State.npc?State.npc:"Chưa gặp"}</p>`;}
-function renderHistory(){
-  const h=State.history||{deaths:[],events:[],legends:[]};
-  const deaths=(h.deaths||[]).slice(-5).map(d=>`${d.location} (${d.year})`).join("; ");
-  const events=(h.events||[]).slice(-5).map(e=>`${e.type} (${e.year})`).join("; ");
-  const legends=(h.legends||[]).slice(-5).map(l=>`${l.name} (${l.year})`).join("; ");
-  document.getElementById("historyPanel").innerHTML=`<h3>Lịch sử</h3><p>Tử vong: ${deaths||"—"}</p><p>Sự kiện: ${events||"—"}</p><p>Huyền thoại: ${legends||"—"}</p>`;
+/* ==== Names ==== */
+function genName(rng,race){
+  const s={
+    Human:["Al","Cor","Mar","Eli","Ren","Sam","Jon","Mae"],
+    Elf:["Ae","El","Lae","Syl","Tha","Vael","Eri"],
+    Dwarf:["Brom","Dur","Thra","Gim","Rok","Harn"],
+    Orc:["Gor","Ur","Thok","Zar","Mog","Krug"],
+    Tiefling":["Zea","Nyx","Var","Kael","Ira","Vex"],
+    Halfling:["Pip","Merry","Ros","Fin","Cob","Tali"]
+  }[race]||["Ash","Rei","Sol","Kai"];
+  return choice(rng,s)+choice(rng,["","an","or","is","en","ia"]);
 }
-function renderPanels(){renderIntro();renderChar();renderInv();renderQuest();renderNPC();renderHistory();}
 
-/* ==== Hub ==== */
+/* ==== World & character ==== */
+function initWorld(){
+  let seed=LS.getSeed(); if(!seed){seed="world-"+Math.random().toString(36).slice(2,8); LS.setSeed(seed);}
+  State.seed=seed; State.rng=makeRNG(seed);
+  const era=choice(State.rng,KY_NGUYEN);
+  State.world={era,climate:choice(State.rng,["khô","mù sương","bão tố","lạnh"]),magic:choice(State.rng,["phai tàn","bất ổn","cấm kỵ","hưng thịnh"]),
+    factions:["Ashen Ward","Veilcartel","Moon Choir"].sort(()=>State.rng()-0.5)};
+  State.year=roll(State.rng,70,210);
+  State.location=choice(State.rng,DIA_DIEM);
+  State.history=LS.getHistory(seed);
+}
+
+function genCharacter(){
+  const rng=makeRNG(State.seed+"-run-"+Math.random().toString(36).slice(2,7));
+  const race=choice(rng,CHUNG_TOC), bg=choice(rng,XUAT_THAN);
+  const traits=[choice(rng,DAC_TINH),choice(rng,DAC_TINH)];
+  const skills=[choice(rng,KY_NANG),choice(rng,KY_NANG)];
+  const base=6+roll(rng,0,4);
+  State.maxHp=base+(traits.includes("Điềm tĩnh")?2:0);
+  State.hp=State.maxHp;
+  State.stamina=3+roll(rng,0,3);
+  State.player={name:genName(rng,race),race,bg,traits,skills};
+  State.objective=choice(rng,MUC_TIEU);
+  State.equip.weapon=choice(rng,["Rusty Dagger","Iron Sword","Oak Bow"]);
+  State.equip.armor=choice(rng,["Leather Armor",null]);
+  State.equip.trinket=choice(rng,["Charm Pendant",null]);
+  State.inventory=[choice(rng,VAT_PHAM),choice(rng,VAT_PHAM),"Lương khô"];
+  State.trauma=choice(rng,TRAUMA);
+  State.fear=roll(rng,5,20);
+  State.quest=null;
+  State.npcPersonal=createPersonalNPC(rng);
+}
+
+/* ==== Personal NPC ==== */
+function createPersonalNPC(rng){
+  const role=choice(rng,VAI_TRO_NPC);
+  const fname=choice(rng,["Aeris","Brom","Nyra","Kael","Rook","Ilan","Maeve","Thren","Edda","Corin","Lysa","Varin","Neris","Jorah","Tamsin","Rhea","Sil","Kade","Olen","Vestra"]);
+  const sname=choice(rng,["Dawnfall","Ashvale","Moonwrit","Gloomfen","Ridgewell","Spireglass","Marrowsong","Hollowgate","Thorn","Mistral","Umbrin","Voss"]);
+  const name=`${fname} ${sname}`;
+  const affinity=roll(rng,20,80);
+  const back=choice(rng,[
+    `đổi tên ba lần để chạy trốn món nợ máu từ thời mặt trăng`,
+    `rời Moon Choir sau một phiên chất vấn cay đắng`,
+    `đếm nứt tường Hollowgate để nhớ tên người đã mất`,
+    `đã căng buồm qua Vigilant Docks và sợ tiếng gió gào trên cột buồm`,
+    `đọc rune đến rách da tay, tin văn tự có linh hồn`,
+  ]);
+  const lines={
+    meet:`${name} (${role}) nép dưới bóng tường, giọng trầm như ký ức: “Ta đã đi qua quá nhiều cửa ngõ, nhìn người đến rồi đi. Có câu chuyện chỉ mở khi người nghe biết im lặng. Câu chuyện của ta mang tên '${back}'. Ngươi đủ can đảm để nghe đến hết không?”`,
+    mid:`“Nhiều năm trước, ở ${choice(State.rng,DIA_DIEM)}, ta đánh đổi tuổi trẻ để giữ một bí mật không ai muốn nghe. Có đêm ta mơ mình là tờ giấy, bị gấp bởi bàn tay run rẩy. Nếu ta viết tên ngươi lên đó, ngươi có sẵn lòng bị gấp lại một lần nữa không?”`,
+    trust:`“Ta không dễ tin ai. Nhưng điều gì đó trong ánh mắt ngươi gợi niềm tin cổ xưa: một chỗ để đặt bàn tay. Ta đặt tay vào câu chuyện của ngươi. Đừng buông.”`,
+    anger:`“Ta kể quá nhiều cho người không biết giữ lời. Hãy mang sự thiếu kiên nhẫn của ngươi đi nơi khác.”`
+  };
+  return {name,role,affinity,back,lines};
+}
+
+/* ==== UI ==== */
+const logEl=document.getElementById("log");
+function log(txt,cls){const p=document.createElement("p");p.textContent=txt;p.className=cls||"";logEl.appendChild(p);logEl.scrollTop=logEl.scrollHeight;}
+function setHTML(id,html){document.getElementById(id).innerHTML=html;}
+function setActions(btns){
+  const root=document.getElementById("actions");
+  root.innerHTML="";
+  btns.forEach(b=>{
+    const btn=document.createElement("button");
+    btn.textContent=b.label;
+    if(b.class) btn.classList.add(b.class);
+    btn.onclick=b.onClick;
+    root.appendChild(btn);
+  });
+}
+
+/* ==== Hub actions luôn hiển thị ==== */
 function returnToHub(){
   renderPanels();
   setActions([
-    {label:"Khảo sát",class:"primary",onClick:explore},
-    {label:"Gặp NPC",onClick:meetNPC},
-    {label:"Di chuyển",onClick:travel},
-    {label:"Mở túi đồ",onClick:()=>{renderInv();log("Bạn mở túi đồ.");setActions([{label:"Trở về",onClick:returnToHub}]);}}
+    {label:"Khảo sát", class:"primary", onClick:explore},
+    {label:"Gặp NPC", onClick:meetNPC},
+    {label:"Di chuyển", onClick:travel},
+    {label:"Mở túi đồ", onClick:()=>{renderInv();log("Bạn mở túi đồ.", "sys"); setBackButton(returnToHub);}}
   ]);
 }
+function setBackButton(cb){
+  const root=document.getElementById("actions");
+  const b=document.createElement("button");
+  b.textContent="Trở về";
+  b.onclick=cb;
+  root.appendChild(b);
+}
 
-/* ==== Hành động ==== */
-function explore(){log("Bạn khảo sát khu vực...");setActions([{label:"Trở về",onClick:returnToHub}]);}
-function meetNPC(){State.npc="Aeris Dawnfall";log("Bạn gặp NPC: Aeris Dawnfall.");renderNPC();setActions([{label:"Trở về",onClick:returnToHub}]);}
-function travel(){log("Bạn di chuyển tới vùng đất khác.");setActions([{label:"Trở về",onClick:returnToHub}]);}
-function useItem(idx){
-  const item=State.inventory[idx];
-  if(item==="Lương khô"){State.hp=Math.min(State.maxHp,State.hp+2);log("Bạn ăn lương khô, hồi 2 HP.");}
-  if(item==="Thuốc bổ"){State.hp=Math.min(State.maxHp,State.hp+3);log("Bạn uống thuốc bổ, hồi 3 HP.");}
-  State.inventory.splice(idx,1);
-  renderInv();renderChar();
-  State.inCombat?returnToCombat():returnToHub();
+/* ==== Renderers ==== */
+function renderIntro(){
+  const f=choice(State.rng,ORIGINS);
+  const origin=f(State.player.name, State.year, State.location, State.objective, State.trauma);
+  setHTML("intro",
+    `<div class="row">
+      <span class="tag">Kỷ nguyên: ${State.world.era}</span>
+      <span class="tag">Năm: ${State.year}</span>
+      <span class="tag">Vị trí: ${State.location}</span>
+      <span class="tag fear">Sợ hãi: ${State.fear}</span>
+    </div>
+    <p>${origin}</p>
+    <p class="small">Phép thuật: ${State.world.magic}; Khí hậu: ${State.world.climate}. Phe phái: ${State.world.factions.join(", ")}.</p>`);
+}
+function renderChar(){
+  const p=State.player;
+  setHTML("char",
+    `<h3>Nhân vật</h3>
+     <div><strong>${p.name}</strong> — ${p.race}, ${p.bg}</div>
+     <div class="statgrid"><div>Kỹ năng: ${p.skills.join(", ")}</div><div>Đặc tính: ${p.traits.join(", ")}</div></div>
+     <div class="statgrid"><div>HP: ${State.hp}/${State.maxHp}</div><div>Thể lực: ${State.stamina}</div></div>
+     <div class="statgrid"><div class="fear">Sợ hãi: ${State.fear}</div><div>Vết thương tâm lý: ${State.trauma}</div></div>
+     <div class="divider"></div><div>Mục tiêu: ${State.objective.text}</div>`);
+}
+function renderWorld(){
+  setHTML("world",
+    `<h3>Thế giới</h3>
+     <div>Seed: <span class="small">${State.seed}</span></div>
+     <div class="statgrid"><div>Kỷ nguyên: ${State.world.era}</div><div>Năm: ${State.year}</div></div>
+     <div>Phe phái: ${State.world.factions.join(", ")}</div>`);
+}
+function renderStatus(){
+  setHTML("status",
+    `<h3>Trang bị</h3>
+     <div class="equip">
+       <div>Vũ khí: ${State.equip.weapon||"—"}</div>
+       <div>Giáp: ${State.equip.armor||"—"}</div>
+       <div>Bùa: ${State.equip.trinket||"—"}</div>
+     </div>
+     <div class="small">Chọn vật phẩm trong túi để Dùng hoặc Trang bị bất kỳ lúc nào.</div>`);
+}
+function renderInv(){
+  const inv=State.inventory.map((i,idx)=>
+    `<div>• ${i}
+      <button class="primary" style="margin-left:8px" onclick="useItemFromInventory(${idx})">Dùng</button>
+      <button style="margin-left:6px" onclick="equipFromInventory(${idx})">Trang bị</button>
+    </div>`).join("");
+  setHTML("inventory",`<h3>Túi đồ</h3><div class="inv">${inv||"<div>Trống</div>"}</div>`);
+}
+function renderQuest(){
+  const q=State.quest;
+  setHTML("questPanel",
+    `<h3>Nhiệm vụ</h3>
+     ${q?`<div class="quest">
+        <div><strong>${q.title}</strong></div>
+        <div class="small">${q.description}</div>
+        <div class="statgrid"><div>Địa điểm: ${q.targetLocation||"—"}</div><div>Mục tiêu: ${q.targetEnemy||q.targetItem||"—"}</div></div>
+        <div class="small">Phần thưởng: ${q.reward||"—"}</div>
+        <div class="small">Tiến độ: ${q.status}</div>
+      </div>`:"<div class='small'>Chưa có nhiệm vụ.</div>"}`);
+}
+function renderNPC(){
+  const n=State.npcPersonal;
+  setHTML("npcPanel",
+    `<h3>NPC cá nhân</h3>
+     <div><strong>${n.name}</strong> — ${n.role}</div>
+     <div class="small">Quá khứ: ${n.back}</div>
+     <div class="affinity">Độ hảo cảm: ${n.affinity}</div>`);
+}
+function renderHistory(){
+  const h=State.history||{deaths:[],events:[],legends:[]};
+  const deaths=(h.deaths||[]).slice(-5).map(d=>`${d.location} (năm ${d.year})`).join("; ");
+  const events=(h.events||[]).slice(-5).map(e=>`${e.type} — ${e.location} (năm ${e.year})`).join("; ");
+  const legends=(h.legends||[]).slice(-5).map(l=>`${l.name}: ${l.objective} — ${l.location} (năm ${l.year})`).join("; ");
+  setHTML("historyPanel",
+    `<h3>Lịch sử thế giới</h3>
+     <div><strong>Tử vong gần đây:</strong> ${deaths||"—"}</div>
+     <div><strong>Sự kiện:</strong> ${events||"—"}</div>
+     <div class="legend"><strong>Huyền thoại:</strong> ${legends||"—"}</div>`);
+}
+function renderPanels(){renderIntro();renderChar();renderWorld();renderStatus();renderInv();renderQuest();renderNPC();renderHistory();}
+
+/* ==== Bắt đầu & hub ==== */
+function startRun(){
+  log(`Bạn thức dậy tại ${State.location}, năm ${State.year} — kỷ nguyên ${State.world.era}.`, "sys");
+  log(`Trong lòng bạn thấp thỏm về "${State.trauma}".`, "warn");
+  const danger=State.history.deaths.find(d=>d.location===State.location&&d.year<=State.year);
+  if(danger&&!State.flags.warnedDanger){log(`Người qua đường thì thầm: “Có kẻ đã bỏ mạng ở ${danger.location}, năm ${danger.year}.”`, "warn");State.flags.warnedDanger=true;}
+  returnToHub(); // đảm bảo nút xuất hiện ngay từ đầu
+}
+
+/* ==== Exploration ==== */
+function explore(){
+  const rng=State.rng;
+  const enc=choice(rng,["monster","findItem","worldEvent","storyEvent"]);
+  maybeTriggerFear(enc);
+  if(enc==="monster"){
+    const type=choice(rng,QUAI);
+    log(`Bạn chạm trán ${type} ở rìa ${State.location}!`, "bad");
+    if(maybePanic(type)) { returnToHub(); return; }
+    startCombat(type);
+    return;
+  }
+  if(enc==="findItem"){
+    const item=choice(rng,VAT_PHAM);
+    State.inventory.push(item);renderInv();
+    log(`Bạn nhặt được: ${item}.`, "good");
+    returnToHub(); return;
+  }
+  if(enc==="worldEvent"){
+    const e={type:"Biến cố",location:State.location,year:State.year};
+    State.history.events.push(e);LS.setHistory(State.seed,State.history);
+    log(`Một biến cố đã xảy ra ở ${State.location}.`, "warn");
+    returnToHub(); return;
+  }
+  storyEvent();
+}
+
+/* ==== Fear & panic ==== */
+function maybeTriggerFear(enc){
+  const t=State.trauma; let inc=0;
+  if(t==="Rắn" && enc==="monster") inc=2;
+  if(t==="Tàn tích" && (State.location.includes("Spire")||State.location.includes("Ridge"))) inc=1;
+  if(t==="Đầm lầy đêm" && (State.location.includes("Marsh")||State.location.includes("Gloomfen"))) inc=2;
+  if(t==="Bóng ma" && enc==="monster") inc=2;
+  if(t==="Đám đông" && (State.location.includes("Bazaar")||State.location.includes("Emberford"))) inc=1;
+  if(t==="Lửa" && enc==="worldEvent") inc=2;
+  if(inc>0){State.fear=Math.min(100,State.fear+inc);renderChar();log("Nỗi sợ dâng lên.", "warn");}
+}
+function maybePanic(context){
+  const traumaHit=(State.trauma==="Rắn" && String(context).includes("Serpent"))
+               || (State.trauma==="Bóng ma" && String(context).includes("Wraith"))
+               || (State.trauma==="Đám đông" && (State.location.includes("Bazaar")||State.location.includes("Emberford")));
+  const chance=Math.min(0.75,0.15+State.fear/100*0.6);
+  if(traumaHit && Math.random()<chance){
+    log(`${State.player.name} hoảng loạn bỏ chạy!`, "warn");
+    const dest=choice(State.rng,DIA_DIEM.filter(l=>l!==State.location));
+    log(`Bạn lao khỏi ${State.location} tới ${dest}.`, "sys");
+    State.location=dest; State.stamina=Math.max(0,State.stamina-1); State.fear=Math.max(0,State.fear-5);
+    renderIntro(); renderChar();
+    return true;
+  }
+  return false;
+}
+
+/* ==== Story Event & NPC & quest ==== */
+function storyEvent(){
+  const npc=State.npcPersonal;
+  log(npc.lines.meet, "sys");
+  log(npc.lines.mid, "sys");
+  const proposed=makeQuestAligned();
+  setActions([
+    {label:"Chia sẻ thật lòng", class:"primary", onClick:()=>{
+      npc.affinity=Math.min(100,npc.affinity+roll(State.rng,8,15));
+      log(npc.lines.trust, "good");
+      State.quest=proposed;State.quest.status="Nhận nhiệm vụ";renderQuest();renderNPC();
+      returnToHub();
+    }},
+    {label:"Thương lượng bằng bạc", onClick:()=>{
+      const idx=State.inventory.indexOf("Đồng bạc");
+      if(idx>-1){State.inventory.splice(idx,1);renderInv();
+        npc.affinity=Math.min(100,npc.affinity+roll(State.rng,5,10));
+        log(`${npc.name} chạm tay vào đồng bạc, khẽ nói: “Đôi khi câu chuyện cần một cái giá.”`, "good");
+        State.quest=proposed;State.quest.status="Nhận nhiệm vụ (thương lượng)";renderQuest();renderNPC();
+      } else {log("Bạn không có Đồng bạc.", "sys");}
+      returnToHub();
+    }},
+    {label:"Cắt ngang lạnh lùng", class:"danger", onClick:()=>{
+      npc.affinity=Math.max(0,npc.affinity-roll(State.rng,10,18));
+      if(npc.affinity<25){log(npc.lines.anger, "bad"); startCombat(npc.role+" (thù địch)");}
+      else {log(`${npc.name} im lặng hồi lâu: “Sự vội vã làm hỏng tất cả.”`, "warn"); returnToHub();}
+      renderNPC();
+    }},
+    {label:"Rời đi", onClick:returnToHub}
+  ]);
+}
+function meetNPC(){
+  // Gây story event từ hub
+  storyEvent();
+}
+function makeQuestAligned(){
+  const type=State.objective.questType || choice(State.rng,["relic","rune","hunt","escort","deliver"]);
+  if(type==="relic"){const loc=choice(State.rng,["Whisper Marsh","Gloomfen","Hollowgate"]);
+    return {id:"quest_relic",title:"Tìm di vật thất lạc",description:`Một mảnh ký ức cũ dẫn tới ${loc}. Có những hộp mở bằng lời dỗ dành hơn là chìa khóa.`,targetLocation:loc,targetItem:"Mảnh di vật",reward:"Bảng rune",status:"Mới"};}
+  if(type==="rune"){const loc=choice(State.rng,["Ashen Spire","Mistral Keep","Sable Ridge"]);
+    return {id:"quest_rune",title:"Giải mã bảng rune",description:`Có chữ viết đứt đoạn ở ${loc}. Muốn đọc, phải nghe bằng tay trước.`,targetLocation:loc,targetItem:"Bảng rune",reward:"Charm Pendant",status:"Mới"};}
+  if(type==="hunt"){const loc=choice(State.rng,["Sable Ridge","Whisper Marsh","Emberford"]);const enemy=choice(State.rng,["Bog Serpent","Hexed Wolf","Bone Stalker"]);
+    return {id:"quest_hunt",title:"Săn hung thú được đánh dấu",description:`Dấu máu mờ ở ${loc}, chỉ còn mùi sắt của ký ức.`,targetLocation:loc,targetEnemy:enemy,reward:"Đồng bạc",status:"Mới"};}
+  if(type==="escort"){const loc=choice(State.rng,["Sunless Bazaar","Emberford"]);
+    return {id:"quest_escort",title:"Hộ tống người thừa kế",description:`Có người không biết đường đi, chỉ biết hướng về nhau. Đưa người ấy tới ${loc}.`,targetLocation:loc,targetItem:"Bản đồ cũ",reward:"Healer's Kit",status:"Mới"};}
+  const loc=choice(State.rng,["Moon Choir (Emberford)","Hollowgate"]);
+  return {id:"quest_deliver",title:"Giao thư mật",description:`Một lá thư không muốn được đọc, chỉ muốn đến nơi. Đích đến là ${loc}.`,targetLocation:loc,targetItem:"Đồng bạc",reward:"Charm Pendant",status:"Mới"};
+}
+
+/* ==== Travel & quest progress ==== */
+function travel(){
+  const dest=choice(State.rng,DIA_DIEM.filter(l=>l!==State.location));
+  log(`Bạn di chuyển từ ${State.location} tới ${dest}.`, "sys");
+  State.location=dest; const d=roll(State.rng,-7,9); State.year=Math.max(1,State.year+d);
+  renderIntro();
+  checkQuestOnArrive();
+  returnToHub();
+}
+function checkQuestOnArrive(){
+  if(!State.quest) return;
+  if(State.location===State.quest.targetLocation){
+    State.quest.status="Đến địa điểm mục tiêu"; renderQuest();
+    log(`Bạn đã tới ${State.quest.targetLocation}.`, "good");
+    setActions([
+      {label:"Khảo sát mục tiêu", class:"primary", onClick:()=>{
+        const found=State.rng()>0.4;
+        if(State.quest.targetItem){
+          if(found){State.inventory.push(State.quest.targetItem);renderInv();log(`Bạn tìm thấy ${State.quest.targetItem}!`, "good"); tryCompleteQuest();}
+          else {log("Manh mối mờ nhạt.", "sys"); returnToHub();}
+        } else if(State.quest.targetEnemy){
+          log(`Bạn đánh hơi thấy ${State.quest.targetEnemy}.`, "warn");
+          if(maybePanic(State.quest.targetEnemy)) returnToHub(); else startCombat(State.quest.targetEnemy);
+        } else {log("Mục tiêu không rõ ràng.", "sys"); returnToHub();}
+      }},
+      {label:"Rời đi", onClick:returnToHub}
+    ]);
+  }
+}
+
+/* ==== Inventory: Dùng & Trang bị ==== */
+function useItemFromInventory(idx){
+  const item=State.inventory[idx]; if(!item){log("Túi đồ trống.", "sys"); return;}
+  if(["Thuốc bổ","Healer's Kit","Lương khô"].includes(item)){
+    const heal=item==="Healer's Kit"?4:item==="Thuốc bổ"?3:2;
+    State.hp=Math.min(State.maxHp,State.hp+heal); State.inventory.splice(idx,1);
+    renderInv(); renderChar(); log(`Bạn dùng ${item}, hồi ${heal} HP.`, "good");
+    State.inCombat ? returnToCombat() : returnToHub(); return;
+  }
+  if(item==="Bom khói"){
+    State.inventory.splice(idx,1); log("Bom khói kích hoạt — giảm căng thẳng.", "good");
+    State.fear=Math.max(0,State.fear-3); renderChar();
+    State.inCombat ? returnToCombat() : returnToHub(); return;
+  }
+  if(item==="Kìm mở khóa"){ log("Bạn kiểm tra ổ khóa gần đó.", "sys"); State.inCombat ? returnToCombat() : returnToHub(); return; }
+  if(["Bản đồ cũ","Bảng rune","Mảnh di vật"].includes(item)){
+    log(`Bạn nghiên cứu ${item}, manh mối rõ hơn.`, "good"); if(State.quest){State.quest.status="Manh mối rõ ràng"; renderQuest();}
+    State.fear=Math.max(0,State.fear-2); renderChar();
+    State.inCombat ? returnToCombat() : returnToHub(); return;
+  }
+  if(item==="Đồng bạc"){ log("Đồng bạc sẵn sàng cho thương lượng.", "sys"); State.inCombat ? returnToCombat() : returnToHub(); return; }
+  log("Vật phẩm không thể dùng ngay.", "sys"); State.inCombat ? returnToCombat() : returnToHub();
+}
+function equipFromInventory(idx){
+  const item=State.inventory[idx]; if(!item){State.inCombat?returnToCombat():returnToHub();return;}
+  if(NHAN_VAT_VU_KHI.some(t=>item.includes(t))||item.includes("Sword")||item.includes("Dagger")||item.includes("Bow")){State.equip.weapon=item; log(`Trang bị vũ khí: ${item}.`, "good");}
+  else if(NHAN_VAT_GIAP.some(t=>item.includes(t))||item.includes("Armor")){State.equip.armor=item; log(`Mặc giáp: ${item}.`, "good");}
+  else {State.equip.trinket=item; log(`Đeo bùa: ${item}.`, "good");}
+  renderStatus(); State.inCombat ? returnToCombat() : returnToHub();
 }
 
 /* ==== Combat ==== */
-function startCombat(enemy){State.inCombat=true;State.combatEnemy={name:enemy,hp:5};log(`Chiến đấu với ${enemy}!`);returnToCombat();}
+function weaponPower(){const w=State.equip.weapon||""; if(w.includes("Iron Sword"))return 3; if(w.includes("Oak Bow"))return 2; if(w.includes("Rusty Dagger"))return 1; return 1;}
+function skillBonus(){let b=0; if(State.player.skills.includes("Kiếm thuật"))b+=1; if(State.player.skills.includes("Cung thuật"))b+=1; if(State.player.skills.includes("Rune"))b+=1; return b;}
+function armorMit(){const a=State.equip.armor||""; return a.includes("Leather Armor")?1:0;}
+
+function startCombat(enemy){
+  State.inCombat=true; State.combatCtx={enemy, hp:roll(State.rng,4,8)};
+  log(`Chiến đấu bắt đầu với ${enemy} (HP ${State.combatCtx.hp}).`, "sys");
+  if(maybePanic(enemy)){State.inCombat=false; returnToHub(); return;}
+  returnToCombat();
+}
 function returnToCombat(){
   renderPanels();
   setActions([
-    {label:"Tấn công",class:"primary",onClick:attack},
-    {label:"Dùng vật phẩm",onClick:()=>{renderInv();setActions([{label:"Trở lại giao tranh",onClick:returnToCombat}]);}},
-    {label:"Phòng thủ",onClick:defend},
-    {label:"Tháo chạy",class:"danger",onClick:flee}
+    {label:"Tấn công", class:"primary", onClick:attack},
+    {label:"Dùng vật phẩm", onClick:()=>{renderInv();log("Chọn vật phẩm để dùng.", "sys"); setBackButton(returnToCombat);}},
+    {label:"Phòng thủ", onClick:defend},
+    {label:"Tháo chạy", class:"danger", onClick:flee}
   ]);
 }
-function attack(){State.combatEnemy.hp-=2;log(`Bạn đánh ${State.combatEnemy.name}, còn ${State.combatEnemy.hp} HP.`);if(State.combatEnemy.hp<=0){log("Bạn thắng!");State.inCombat=false;returnToHub();}else{enemyTurn();}}
-function defend(){log("Bạn thủ thế.");enemyTurn(true);}
-function flee(){log("Bạn tháo chạy!");State.inCombat=false;returnToHub();}
-function enemyTurn(defending=false){const dmg=defending?1:2;State.hp-=dmg;log(`${State.combatEnemy.name} tấn công, bạn mất ${dmg} HP.`);renderChar();if(State.hp<=0){log("Bạn đã tử nạn.");State.inCombat=false;setActions([{label:"Chơi lại",class:"primary",onClick:boot}]);}else{returnToCombat();}}
-
-/* ==== Khởi động ==== */
-function boot(){
-  State.player="Nhân vật";
-  State.hp=10;State.maxHp=10;
-  State.inventory=["Lương khô","Thuốc bổ"];
-  State.quest=null;State.npc=null;
-  State.history={deaths:[],events:[],legends:[]};
-  document.getElementById("log").innerHTML="";
-  log("Khởi đầu hành trình...");
-  returnToHub(); // đảm bảo nút xuất hiện ngay từ đầu
+function attack(){
+  const fearMiss=Math.random()< (State.fear/100*0.25);
+  if(fearMiss){log("Bạn lỡ tay vì sợ hãi, đòn đánh hụt!", "warn"); enemyTurn(); return;}
+  const dmg=1+weaponPower()+skillBonus()+roll(State.rng,0,1);
+  State.combatCtx.hp=Math.max(0,State.combatCtx.hp-dmg);
+  log(`Bạn gây ${dmg} sát thương. ${State.combatCtx.enemy} còn ${State.combatCtx.hp} HP.`, "good");
+  if(State.combatCtx.hp<=0){return winCombat();}
+  enemyTurn();
 }
-boot();
+function defend(){log("Bạn thủ thế, giảm sát thương nhận vào.", "sys"); enemyTurn(true);}
+function flee(){
+  const ok=State.stamina>0&&State.rng()>0.35; State.stamina=Math.max(0,State.stamina-1);
+  if(ok){log("Bạn thoát khỏi giao tranh.", "good"); State.inCombat=false; returnToHub(); return;}
+  log("Bạn thất bại khi tháo chạy!", "bad"); enemyTurn();
+}
+function enemyTurn(defending){
+  const dmg=roll(State.rng,1,3)-armorMit()-(defending?1:0); const real=Math.max(0,dmg);
+  State.hp=Math.max(0,State.hp-real); renderChar();
+  if(real>0) log(`${State.combatCtx.enemy} tấn công, bạn mất ${real} HP.`, "bad");
+  if(String(State.combatCtx.enemy).includes("Wraith")){State.fear=Math.min(100,State.fear+3); renderChar();}
+  if(State.hp<=0){onDeath(State.combatCtx.enemy); return;}
+  returnToCombat();
+}
+function winCombat(){
+  const loot=choice(State.rng,["Đồng bạc","Bản đồ cũ","Bom khói","Kìm mở khóa","Mảnh di vật","Bảng rune"]);
+  State.inventory.push(loot); renderInv();
+  log(`Bạn đánh bại ${State.combatCtx.enemy}! Nhặt được ${loot}.`, "good");
+  if(State.quest && State.quest.targetEnemy && String(State.combatCtx.enemy).includes(State.quest.targetEnemy)){
+    State.quest.status="Đã hạ mục tiêu"; renderQuest(); tryCompleteQuest();
+  }
+  State.fear=Math.max(0,State.fear-4); renderChar();
+  State.inCombat=false; State.combatCtx=null; returnToHub();
+}
+
+/* ==== Quest completion & true ending ==== */
+function tryCompleteQuest(){
+  if(!State.quest) return;
+  let completed=false;
+  if(State.quest.targetItem){completed=State.inventory.includes(State.quest.targetItem);}
+  else if(State.quest.targetEnemy){completed=State.quest.status==="Đã hạ mục tiêu";}
+  else if(State.quest.id==="quest_deliver"){completed=State.location.includes("Moon Choir")||State.quest.status.includes("Đến địa điểm");}
+  else if(State.quest.id==="quest_escort"){completed=State.quest.status.includes("Đến địa điểm");}
+  if(!completed) return;
+
+  if(State.quest.reward){
+    equipGain(State.quest.reward);
+    const keep= !["Charm Pendant","Leather Armor","Iron Sword","Oak Bow","Rusty Dagger"].includes(State.quest.reward);
+    if(keep && !State.inventory.includes(State.quest.reward)){State.inventory.push(State.quest.reward); renderInv();}
+  }
+  State.quest.status="Hoàn thành"; renderQuest(); log(`Bạn đã hoàn thành: ${State.quest.title}.`, "good");
+  const aligns=(State.objective.questType==="relic" && State.quest.id==="quest_relic")
+             ||(State.objective.questType==="rune"  && State.quest.id==="quest_rune")
+             ||(State.objective.questType==="hunt"  && State.quest.id==="quest_hunt")
+             ||(State.objective.questType==="escort"&& State.quest.id==="quest_escort")
+             ||(State.objective.questType==="deliver"&& State.quest.id==="quest_deliver");
+  if(aligns){
+    const legend={name:State.player.name, objective:State.objective.text, location:State.location, year:State.year};
+    State.history.legends.push(legend); LS.setHistory(State.seed,State.history);
+    LS.pushRun(State.seed,{name:State.player.name, objective:State.objective.text, legend});
+    log(`Kết thúc viên mãn: ${State.player.name} hoàn thành "${State.objective.text}" tại ${State.location}, năm ${State.year}.`, "good");
+    setActions([
+      {label:"Chơi lại (cùng thế giới)", class:"primary", onClick:restartSameWorld},
+      {label:"Tạo thế giới mới", onClick:newWorld}
+    ]);
+  } else {
+    returnToHub();
+  }
+}
+function equipGain(item){
+  if(item.includes("Sword")||item.includes("Dagger")||item.includes("Bow")) State.equip.weapon=item;
+  else if(item.includes("Armor")) State.equip.armor=item;
+  else State.equip.trinket=item;
+  renderStatus();
+}
+
+/* ==== Death & restart ==== */
+function onDeath(by){
+  log(`Bạn đã tử nạn bởi ${by} tại ${State.location}, năm ${State.year}.`, "bad");
+  State.history.deaths.push({location:State.location,year:State.year,by}); LS.setHistory(State.seed,State.history);
+  LS.pushRun(State.seed,{name:State.player.name, objective:State.objective.text, died:{location:State.location,year:State.year,by}});
+  setActions([
+    {label:"Chơi lại (cùng thế giới)", class:"primary", onClick:restartSameWorld},
+    {label:"Tạo thế giới mới", onClick:newWorld}
+  ]);
+}
+function restartSameWorld(){State.flags.warnedDanger=false; initWorld(); genCharacter(); renderPanels(); startRun();}
+function newWorld(){localStorage.removeItem("rl_world_seed"); State.flags.warnedDanger=false; initWorld(); genCharacter(); renderPanels(); startRun();}
+
+/* ==== Boot ==== */
+(function boot(){initWorld(); genCharacter(); renderPanels(); startRun();})();
 </script>
 </body>
 </html>
